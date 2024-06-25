@@ -98,7 +98,8 @@ $ ./1rbc-light-gen 100000000 data.txt
 
 To submit your own implementation, follow these steps:
 
-1. **Fork the Repository** 
+1. **Fork the Repository**.
 2. **Choose Your Language:** Pick the programming language you used for your solution. If there isn't already a directory for that language, go ahead and create one.
 3. **Claim Your Code Space:** Create a new directory inside the chosen language directory. Name this new directory using your GitHub username. This will keep your code organized and separate from others.
 4. **Write Your Solution:** Dive in and write your amazing implementation within your newly created directory.
+5. **Create a pull request against the upstream repository**.
