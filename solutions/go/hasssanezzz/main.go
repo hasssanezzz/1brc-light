@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -15,71 +17,136 @@ type Result struct {
 	Min, Max, Sum, Visits int
 }
 
-// var hashtable map[string]*Result
+var finalResults = make(map[string]*Result)
 
-func work(index int, chunk string, wg *sync.WaitGroup) {
+func work(chunk string, mainchan chan<- map[string]*Result, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	fmt.Printf("thread[%d]:\n%s\n", index, chunk)
-	wg.Done()
-}
+	localMap := map[string]*Result{}
 
-func read_chunk(index int, file *os.File) string {
+	entries := strings.Split(chunk, ";")
+	for _, entry := range entries {
+		splitResult := strings.Split(entry, ",")
+		if len(splitResult) != 2 {
+			continue
+		}
 
-	_, err := file.Seek(int64(index*chunksize), io.SeekStart)
-	if err != nil {
-		fmt.Printf("error in seeking 0: %v\n", err)
-	}
+		gover, tempStr := splitResult[0], splitResult[1]
+		temp, err := strconv.Atoi(tempStr)
+		if err != nil {
+			log.Println("error parsing temp, entry:", entry)
+			continue
+		}
 
-	reader := bufio.NewReader(file)
-
-	buff := make([]byte, chunksize)
-	_, err = reader.Read(buff)
-	if err != nil {
-		log.Fatal("read_chunk init ", err)
-	}
-
-	chunk := string(buff)
-
-	// cut the start
-	if index != 0 {
-		for i := 0; i < len(chunk); i++ {
-			if chunk[i] == ';' {
-				chunk = chunk[i+1:]
-				break
+		result, ok := localMap[gover]
+		if !ok {
+			r := &Result{
+				Min:    temp,
+				Max:    temp,
+				Sum:    temp,
+				Visits: 1,
 			}
+			localMap[gover] = r
+		} else {
+			if temp < result.Min {
+				result.Min = temp
+			}
+			if temp > result.Max {
+				result.Max = temp
+			}
+			result.Sum += temp
+			result.Visits++
 		}
 	}
 
-	// include the end
-	extraChunk, err := reader.ReadSlice(byte(';'))
-	if err != nil {
-		log.Fatal("read_chunk: ", err)
-	}
-
-	chunk += string(extraChunk)
-
-	return chunk
+	mainchan <- localMap
 }
 
-func initiate_workers(filename string, number_of_workers int) {
+func read_chunks(file *os.File) []string {
+	reader := bufio.NewReader(file)
+
+	// TODO gotta be cleaned
+	var chunks []string
+
+	for {
+		buff := make([]byte, chunksize)
+		n, err := reader.Read(buff)
+		if err == io.EOF {
+			chunks = append(chunks, string(buff[:n]))
+			break
+		}
+		if err != nil {
+			fmt.Println("error in reading chunk:", err)
+			return chunks
+		}
+
+		if n != chunksize {
+			buff = buff[:n]
+		}
+
+		for buff[len(buff)-1] != ';' {
+			readbyte, err := reader.ReadByte()
+			if err != nil {
+				fmt.Printf("error in reading byte: %v", err)
+				break
+			}
+
+			buff = append(buff, readbyte)
+		}
+
+		chunks = append(chunks, string(buff))
+	}
+
+	return chunks
+}
+
+func initiate_workers(filename string) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalln("initiate workers:", err)
 	}
 	defer file.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(number_of_workers)
+	// TODO stream the chunks
+	chunks := read_chunks(file)
 
-	for i := 0; i < number_of_workers; i++ {
-		chunk := read_chunk(i, file)
-		fmt.Print(chunk)
-		go work(i, chunk, &wg)
+	for _, c := range chunks {
+		fmt.Print(c)
 	}
 
-	wg.Wait()
+	// var wg sync.WaitGroup
+	// wg.Add(len(chunks))
+	// resultChan := make(chan map[string]*Result)
 
-	file.Close()
+	// for _, chunk := range chunks {
+	// 	go work(chunk, resultChan, &wg)
+	// }
+
+	// go func() {
+	// 	wg.Wait()
+	// 	println("Channel closed")
+	// 	close(resultChan)
+	// }()
+
+	// for mp := range resultChan {
+	// 	for gover, result := range mp {
+	// 		storedResult, ok := finalResults[gover]
+	// 		if !ok {
+	// 			finalResults[gover] = result
+	// 		} else {
+	// 			if storedResult.Min > result.Min {
+	// 				storedResult.Min = result.Min
+	// 			}
+
+	// 			if storedResult.Max < result.Max {
+	// 				storedResult.Max = result.Max
+	// 			}
+
+	// 			storedResult.Sum += result.Sum
+	// 			storedResult.Visits += result.Visits
+	// 		}
+	// 	}
+	// }
 }
 
 func main() {
@@ -102,7 +169,11 @@ func main() {
 
 	filesize := stat.Size()
 
-	number_of_workers := 12
+	number_of_workers := 10
 	chunksize = int(filesize) / number_of_workers
-	initiate_workers(filename, number_of_workers)
+	initiate_workers(filename)
+
+	for gover, result := range finalResults {
+		fmt.Printf("%s=%d/%d/%d\n", gover, result.Min, result.Max, result.Sum/result.Visits)
+	}
 }
