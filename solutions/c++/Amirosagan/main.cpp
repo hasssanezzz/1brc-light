@@ -3,9 +3,9 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <unordered_map>
 
 struct City {
+  std::string name;
   boost::multiprecision::int128_t min = 1000000000;
   boost::multiprecision::int128_t max = 0;
   boost::multiprecision::int128_t sum = 0;
@@ -13,6 +13,8 @@ struct City {
   double avg = 0;
   boost::multiprecision::int128_t temperature = 0;
 };
+
+const int MOD = 100007;
 
 int main() {
   // trace time
@@ -30,8 +32,10 @@ int main() {
   std::string city;
   std::string population;
   std::string line;
+  bool iscity = true;
+  long long cityHash = 0;
 
-  std::unordered_map<std::string, City> umap;
+  City *umap = new City[MOD];
 
   while (file.get(ch)) {
     if (ch == ';') {
@@ -39,25 +43,39 @@ int main() {
       boost::multiprecision::int128_t *temp =
           new boost::multiprecision::int128_t(
               boost::multiprecision::cpp_int(population));
-      umap[city].temperature = *temp;
-      umap[city].count += 1;
-      umap[city].sum += *temp;
-      umap[city].min = umap[city].min > *temp ? *temp : umap[city].min;
-      umap[city].max = umap[city].max < *temp ? *temp : umap[city].max;
-      umap[city].avg = (double)umap[city].sum / (double)umap[city].count;
+      umap[cityHash].temperature = *temp;
+      umap[cityHash].count += 1;
+      umap[cityHash].sum += *temp;
+      umap[cityHash].min =
+          umap[cityHash].min > *temp ? *temp : umap[cityHash].min;
+      umap[cityHash].max =
+          umap[cityHash].max < *temp ? *temp : umap[cityHash].max;
+      umap[cityHash].avg =
+          (double)umap[cityHash].sum / (double)umap[cityHash].count;
+      umap[cityHash].name = city;
 
       line.clear();
       city.clear();
       population.clear();
-    } else if (ch == ',')
-      city = line, line.clear();
-    else
+      cityHash = 0;
+      iscity = true;
+    } else if (ch == ',') {
+      city = line;
+      line.clear();
+      iscity = false;
+    } else {
+      if (iscity) {
+        cityHash = ((cityHash * 31) % MOD + ch) % MOD;
+      }
       line += ch;
+    }
   }
 
-  for (const auto &pair : umap) {
-    std::cout << pair.first << " " << pair.second.min << " " << pair.second.max
-              << " " << pair.second.avg << std::endl;
+  for (int i = 0; i < MOD; i++) {
+    if (umap[i].count != 0) {
+      std::cout << umap[i].name << " " << umap[i].min << " " << umap[i].max
+                << " " << umap[i].avg << std::endl;
+    }
   }
 
   file.close();
@@ -66,9 +84,11 @@ int main() {
 
   std::ofstream out("trace_output.trace");
 
-  for (const auto &pair : umap) {
-    out << pair.first << " " << pair.second.min << " " << pair.second.max << " "
-        << pair.second.avg << std::endl;
+  for (int i = 0; i < MOD; i++) {
+    if (umap[i].count != 0) {
+      out << umap[i].name << " " << umap[i].min << " " << umap[i].max << " "
+          << umap[i].avg << std::endl;
+    }
   }
 
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
